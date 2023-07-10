@@ -65,6 +65,12 @@ class _HomePageState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    List<String> imageUrls = [
+      'ur12',
+      'url2',
+      'url3'
+    ]; // Reemplaza con tus URL reales
+
     return RefreshConfiguration.copyAncestor(
       enableLoadingWhenFailed: true,
       context: context,
@@ -74,9 +80,10 @@ class _HomePageState extends State<HomeScreen>
           headerSliverBuilder: (BuildContext context, bool isScrolled) {
             return <Widget>[
               if (_currentPageIndex == 0)
-                HomePageSliverAppBar(context, isScrolled, _tabController)
-              else
-                const SliverAppBar(
+                HomePageSliverAppBar(
+                    context, isScrolled, _tabController, imageUrls),
+              if (_currentPageIndex == 1)
+                SliverAppBar(
                   backgroundColor: Colors.white,
                   collapsedHeight: 0,
                   expandedHeight: 0,

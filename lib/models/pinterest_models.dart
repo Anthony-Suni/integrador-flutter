@@ -1,9 +1,6 @@
 import 'dart:convert';
 
-Pinterest postFromJson(String str) => Pinterest.fromJson(json.decode(str));
-
-String postToJson(Pinterest data) => json.encode(data.toJson());
-
+import 'package:googleapis/classroom/v1.dart';
 
 class Pinterest {
   Pinterest({
@@ -24,9 +21,8 @@ class Pinterest {
     required this.likedByUser,
     required this.currentUserCollections,
     this.sponsorship,
-    required this.topicSubmissions,
+    this.topicSubmissions,
     required this.user,
-    // required this.tags
   });
 
   String id;
@@ -46,77 +42,157 @@ class Pinterest {
   bool likedByUser;
   List<dynamic> currentUserCollections;
   Sponsorship? sponsorship;
-  TopicSubmissions topicSubmissions;
+  TopicSubmissions? topicSubmissions;
   User user;
-  // List<Tag> tags;
 
-  factory Pinterest.fromJson(Map<String, dynamic> json) => Pinterest(
-    id: json["id"],
-    createdAt: DateTime.parse(json["created_at"]),
-    updatedAt: DateTime.parse(json["updated_at"]),
-    promotedAt: json["promoted_at"] == null
-        ? null
-        : DateTime.parse(json["promoted_at"]),
-    width: json["width"],
-    height: json["height"],
-    color: json["color"],
-    blurHash: json["blur_hash"],
-    description: json["description"],
-    altDescription: json["alt_description"],
-    urls: Urls.fromJson(json["urls"]),
-    links: PinterestLinks.fromJson(json["links"]),
-    categories: List<dynamic>.from(json["categories"].map((x) => x)),
-    likes: json["likes"],
-    likedByUser: json["liked_by_user"],
-    currentUserCollections:
-    List<dynamic>.from(json["current_user_collections"].map((x) => x)),
-    sponsorship: json["sponsorship"] == null
-        ? null
-        : Sponsorship.fromJson(json["sponsorship"]),
-    topicSubmissions: TopicSubmissions.fromJson(json["topic_submissions"]),
-    user: User.fromJson(json["user"]),
-    // tags: List<Tag>.from(json["tags"].map((x) => x)),
-  );
+  factory Pinterest.fromJson(Map<String, dynamic> json) {
+    if (!json.containsKey('results')) {
+      throw ArgumentError("Invalid JSON: 'results' property is missing.");
+    }
+
+    dynamic results = json['results'];
+    if (results == null) {
+      throw ArgumentError("Invalid JSON: 'results' property is null.");
+    }
+
+    if (results is List<dynamic>) {
+      List<Pinterest> photos =
+          results.map((x) => Pinterest.fromJson(x)).toList();
+      return photos.first;
+    }
+
+    return Pinterest(
+      id: json["id"],
+      createdAt: DateTime.parse(json["created_at"]),
+      updatedAt: DateTime.parse(json["updated_at"]),
+      promotedAt: json["promoted_at"] != null
+          ? DateTime.parse(json["promoted_at"])
+          : null,
+      width: json["width"],
+      height: json["height"],
+      color: json["color"],
+      blurHash: json["blur_hash"],
+      description: json["description"],
+      altDescription: json["alt_description"],
+      urls: Urls.fromJson(json["urls"] ?? {}),
+      links: PinterestLinks.fromJson(json["links"] ?? {}),
+      categories: List<dynamic>.from(json["categories"] ?? []),
+      likes: json["likes"],
+      likedByUser: json["liked_by_user"],
+      currentUserCollections:
+          List<dynamic>.from(json["current_user_collections"] ?? []),
+      sponsorship: json["sponsorship"] != null
+          ? Sponsorship.fromJson(json["sponsorship"])
+          : null,
+      topicSubmissions: json["topic_submissions"] != null
+          ? TopicSubmissions.fromJson(json["topic_submissions"])
+          : null,
+      user: User.fromJson(json["user"] ?? {}),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      "id": id,
+      "created_at": createdAt.toIso8601String(),
+      "updated_at": updatedAt.toIso8601String(),
+      "promoted_at": promotedAt?.toIso8601String(),
+      "width": width,
+      "height": height,
+      "color": color,
+      "blur_hash": blurHash,
+      "description": description,
+      "alt_description": altDescription,
+      "urls": urls.toJson(),
+      "links": links.toJson(),
+      "categories": categories,
+      "likes": likes,
+      "liked_by_user": likedByUser,
+      "current_user_collections": currentUserCollections,
+      "sponsorship": sponsorship?.toJson(),
+      "topic_submissions": topicSubmissions?.toJson(),
+      "user": user.toJson(),
+    };
+  }
+}
+
+class TopicSubmissions {
+  List<TopicSubmission> submissions;
+
+  TopicSubmissions({
+    required this.submissions,
+  });
+
+  factory TopicSubmissions.fromJson(List<dynamic> json) {
+    List<TopicSubmission> submissions = json
+        .map((submissionJson) => TopicSubmission.fromJson(submissionJson))
+        .toList();
+
+    return TopicSubmissions(submissions: submissions);
+  }
+
+  List<dynamic> toJson() {
+    return submissions.map((submission) => submission.toJson()).toList();
+  }
+}
+
+class TopicSubmission {
+  String status;
+  Topic topic;
+
+  TopicSubmission({
+    required this.status,
+    required this.topic,
+  });
+
+  factory TopicSubmission.fromJson(Map<String, dynamic> json) {
+    return TopicSubmission(
+      status: json['status'],
+      topic: Topic.fromJson(json['topic']),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'status': status,
+      'topic': topic.toJson(),
+    };
+  }
+}
+
+class Urls {
+  Urls({
+    required this.raw,
+    required this.full,
+    required this.regular,
+    required this.small,
+    required this.thumb,
+  });
+
+  String raw;
+  String full;
+  String regular;
+  String small;
+  String thumb;
+
+  factory Urls.fromJson(Map<String, dynamic> json) => Urls(
+        raw: json["raw"],
+        full: json["full"],
+        regular: json["regular"],
+        small: json["small"],
+        thumb: json["thumb"],
+      );
 
   Map<String, dynamic> toJson() => {
-    "id": id,
-    "created_at": createdAt.toIso8601String(),
-    "updated_at": updatedAt.toIso8601String(),
-    "promoted_at":
-    promotedAt == null ? null : promotedAt!.toIso8601String(),
-    "width": width,
-    "height": height,
-    "color": color,
-    "blur_hash": blurHash,
-    "description": description,
-    "alt_description": altDescription,
-    "urls": urls.toJson(),
-    "links": links.toJson(),
-    "categories": List<dynamic>.from(categories.map((x) => x)),
-    "likes": likes,
-    "liked_by_user": likedByUser,
-    "current_user_collections":
-    List<dynamic>.from(currentUserCollections.map((x) => x)),
-    "sponsorship": sponsorship == null ? null : sponsorship!.toJson(),
-    "topic_submissions": topicSubmissions.toJson(),
-    "user": user.toJson(),
-    // 'tags':  List<dynamic>.from(tags.map((x) => x)),
-  };
-
-  static  List<Pinterest> pinterestFromJson(String str) =>
-      List<Pinterest>.from(json.decode(str).map((x) => Pinterest.fromJson(x)));
-
-  static String pinterestToJson(List<Pinterest> data) =>
-      json.encode(List<dynamic>.from(data.map((x) => x.toJson())));
-
+        "raw": raw,
+        "full": full,
+        "regular": regular,
+        "small": small,
+        "thumb": thumb,
+      };
 }
 
 class PinterestLinks {
-  late String self;
-  late String html;
-  late String download;
-  late String downloadLocation;
-
   PinterestLinks({
     required this.self,
     required this.html,
@@ -124,27 +200,27 @@ class PinterestLinks {
     required this.downloadLocation,
   });
 
+  String self;
+  String html;
+  String download;
+  String downloadLocation;
+
   factory PinterestLinks.fromJson(Map<String, dynamic> json) => PinterestLinks(
-    self: json["self"],
-    html: json["html"],
-    download: json["download"],
-    downloadLocation: json["download_location"],
-  );
+        self: json["self"],
+        html: json["html"],
+        download: json["download"],
+        downloadLocation: json["download_location"],
+      );
 
   Map<String, dynamic> toJson() => {
-    "self": self,
-    "html": html,
-    "download": download,
-    "download_location": downloadLocation,
-  };
+        "self": self,
+        "html": html,
+        "download": download,
+        "download_location": downloadLocation,
+      };
 }
 
 class Sponsorship {
-  late List<String> impressionUrls;
-  late String? tagline;
-  late String? taglineUrl;
-  late User sponsor;
-
   Sponsorship({
     required this.impressionUrls,
     this.tagline,
@@ -152,20 +228,25 @@ class Sponsorship {
     required this.sponsor,
   });
 
+  List<String> impressionUrls;
+  String? tagline;
+  String? taglineUrl;
+  User sponsor;
+
   factory Sponsorship.fromJson(Map<String, dynamic> json) => Sponsorship(
-    impressionUrls:
-    List<String>.from(json["impression_urls"].map((x) => x)),
-    tagline: json["tagline"],
-    taglineUrl: json["tagline_url"],
-    sponsor: User.fromJson(json["sponsor"]),
-  );
+        impressionUrls:
+            List<String>.from(json["impression_urls"].map((x) => x)),
+        tagline: json["tagline"],
+        taglineUrl: json["tagline_url"],
+        sponsor: User.fromJson(json["sponsor"]),
+      );
 
   Map<String, dynamic> toJson() => {
-    "impression_urls": List<dynamic>.from(impressionUrls.map((x) => x)),
-    "tagline": tagline,
-    "tagline_url": taglineUrl,
-    "sponsor": sponsor.toJson(),
-  };
+        "impression_urls": List<dynamic>.from(impressionUrls.map((x) => x)),
+        "tagline": tagline,
+        "tagline_url": taglineUrl,
+        "sponsor": sponsor.toJson(),
+      };
 }
 
 class User {
@@ -191,93 +272,72 @@ class User {
     required this.social,
   });
 
-  late String id;
-  late DateTime updatedAt;
-  late String username;
-  late String name;
-  late String firstName;
+  String id;
+  DateTime updatedAt;
+  String username;
+  String name;
+  String firstName;
   String? lastName;
   String? twitterUsername;
   String? portfolioUrl;
   String? bio;
   String? location;
-  late UserLinks links;
-  late ProfileImage profileImage;
+  UserLinks links;
+  ProfileImage profileImage;
   String? instagramUsername;
-  late int totalCollections;
-  late int totalLikes;
-  late int totalPhotos;
-  late bool acceptedTos;
-  late bool forHire;
-  late Social social;
+  int totalCollections;
+  int totalLikes;
+  int totalPhotos;
+  bool acceptedTos;
+  bool forHire;
+  Social social;
 
   factory User.fromJson(Map<String, dynamic> json) => User(
-    id: json["id"],
-    updatedAt: DateTime.parse(json["updated_at"]),
-    username: json["username"],
-    name: json["name"],
-    firstName: json["first_name"],
-    lastName: json["last_name"],
-    twitterUsername: json["twitter_username"],
-    portfolioUrl: json["portfolio_url"],
-    bio: json["bio"],
-    location: json["location"],
-    links: UserLinks.fromJson(json["links"]),
-    profileImage: ProfileImage.fromJson(json["profile_image"]),
-    instagramUsername: json["instagram_username"],
-    totalCollections: json["total_collections"],
-    totalLikes: json["total_likes"],
-    totalPhotos: json["total_photos"],
-    acceptedTos: json["accepted_tos"],
-    forHire: json["for_hire"],
-    social: Social.fromJson(json["social"]),
-  );
+        id: json["id"],
+        updatedAt: DateTime.parse(json["updated_at"]),
+        username: json["username"],
+        name: json["name"],
+        firstName: json["first_name"],
+        lastName: json["last_name"],
+        twitterUsername: json["twitter_username"],
+        portfolioUrl: json["portfolio_url"],
+        bio: json["bio"],
+        location: json["location"],
+        links: UserLinks.fromJson(json["links"]),
+        profileImage: ProfileImage.fromJson(json["profile_image"]),
+        instagramUsername: json["instagram_username"],
+        totalCollections: json["total_collections"],
+        totalLikes: json["total_likes"],
+        totalPhotos: json["total_photos"],
+        acceptedTos: json["accepted_tos"],
+        forHire: json["for_hire"],
+        social: Social.fromJson(json["social"]),
+      );
 
   Map<String, dynamic> toJson() => {
-    "id": id,
-    "updated_at": updatedAt.toIso8601String(),
-    "username": username,
-    "name": name,
-    "first_name": firstName,
-    "last_name": lastName,
-    "twitter_username": twitterUsername,
-    "portfolio_url": portfolioUrl,
-    "bio": bio,
-    "location": location,
-    "links": links.toJson(),
-    "profile_image": profileImage.toJson(),
-    "instagram_username": instagramUsername,
-    "total_collections": totalCollections,
-    "total_likes": totalLikes,
-    "total_photos": totalPhotos,
-    "accepted_tos": acceptedTos,
-    "for_hire": forHire,
-    "social": social.toJson(),
-  };
+        "id": id,
+        "updated_at": updatedAt.toIso8601String(),
+        "username": username,
+        "name": name,
+        "first_name": firstName,
+        "last_name": lastName,
+        "twitter_username": twitterUsername,
+        "portfolio_url": portfolioUrl,
+        "bio": bio,
+        "location": location,
+        "links": links.toJson(),
+        "profile_image": profileImage.toJson(),
+        "instagram_username": instagramUsername,
+        "total_collections": totalCollections,
+        "total_likes": totalLikes,
+        "total_photos": totalPhotos,
+        "accepted_tos": acceptedTos,
+        "for_hire": forHire,
+        "social": social.toJson(),
+      };
 }
 
-// class Tag{
-//   String title;
-//   Tag({required this.title});
-//
-//   factory Tag.fromJson(Map<String, dynamic> json) => Tag(
-//     title: json["title"],
-//   );
-//
-//   Map<String, dynamic> toJson() => {
-//     'title' : title
-//   };
-// }
-
 class UserLinks {
-  late String self;
-  late String html;
-  late String photos;
-  late String likes;
-  late String portfolio;
-  late String following;
-  late String followers;
-
   UserLinks({
     required this.self,
     required this.html,
@@ -288,194 +348,83 @@ class UserLinks {
     required this.followers,
   });
 
+  String self;
+  String html;
+  String photos;
+  String likes;
+  String portfolio;
+  String following;
+  String followers;
+
   factory UserLinks.fromJson(Map<String, dynamic> json) => UserLinks(
-    self: json["self"],
-    html: json["html"],
-    photos: json["photos"],
-    likes: json["likes"],
-    portfolio: json["portfolio"],
-    following: json["following"],
-    followers: json["followers"],
-  );
+        self: json["self"],
+        html: json["html"],
+        photos: json["photos"],
+        likes: json["likes"],
+        portfolio: json["portfolio"],
+        following: json["following"],
+        followers: json["followers"],
+      );
 
   Map<String, dynamic> toJson() => {
-    "self": self,
-    "html": html,
-    "photos": photos,
-    "likes": likes,
-    "portfolio": portfolio,
-    "following": following,
-    "followers": followers,
-  };
+        "self": self,
+        "html": html,
+        "photos": photos,
+        "likes": likes,
+        "portfolio": portfolio,
+        "following": following,
+        "followers": followers,
+      };
 }
 
 class ProfileImage {
-  late String small;
-  late String medium;
-  late String large;
-
   ProfileImage({
     required this.small,
     required this.medium,
     required this.large,
   });
 
+  String small;
+  String medium;
+  String large;
+
   factory ProfileImage.fromJson(Map<String, dynamic> json) => ProfileImage(
-    small: json["small"],
-    medium: json["medium"],
-    large: json["large"],
-  );
-
-  Map<String, dynamic> toJson() => {
-    "small": small,
-    "medium": medium,
-    "large": large,
-  };
-}
-
-class Social {
-  String? instagramUsername;
-  String? portfolioUrl;
-  String? twitterUsername;
-  dynamic paypalEmail;
-
-  Social({
-    this.instagramUsername,
-    this.portfolioUrl,
-    this.twitterUsername,
-    this.paypalEmail,
-  });
-
-  factory Social.fromJson(Map<String, dynamic> json) => Social(
-    instagramUsername: json["instagram_username"],
-    portfolioUrl: json["portfolio_url"],
-    twitterUsername: json["twitter_username"],
-    paypalEmail: json["paypal_email"],
-  );
-
-  Map<String, dynamic> toJson() => {
-    "instagram_username": instagramUsername,
-    "portfolio_url": portfolioUrl,
-    "twitter_username": twitterUsername,
-    "paypal_email": paypalEmail,
-  };
-}
-
-class TopicSubmissions {
-  Health? people;
-  ArtsCulture? fashion;
-  Health? health;
-  ArtsCulture? film;
-  ArtsCulture? spirituality;
-  ArtsCulture? artsCulture;
-
-  TopicSubmissions({
-    this.people,
-    this.fashion,
-    this.health,
-    this.film,
-    this.spirituality,
-    this.artsCulture,
-  });
-
-  factory TopicSubmissions.fromJson(Map<String, dynamic> json) =>
-      TopicSubmissions(
-        people: json["people"] == null ? null : Health.fromJson(json["people"]),
-        fashion: json["fashion"] == null
-            ? null
-            : ArtsCulture.fromJson(json["fashion"]),
-        health: json["health"] == null ? null : Health.fromJson(json["health"]),
-        film: json["film"] == null ? null : ArtsCulture.fromJson(json["film"]),
-        spirituality: json["spirituality"] == null
-            ? null
-            : ArtsCulture.fromJson(json["spirituality"]),
-        artsCulture: json["arts-culture"] == null
-            ? null
-            : ArtsCulture.fromJson(json["arts-culture"]),
+        small: json["small"],
+        medium: json["medium"],
+        large: json["large"],
       );
 
   Map<String, dynamic> toJson() => {
-    "people": people == null ? null : people!.toJson(),
-    "fashion": fashion == null ? null : fashion!.toJson(),
-    "health": health == null ? null : health!.toJson(),
-    "film": film == null ? null : film!.toJson(),
-    "spirituality": spirituality == null ? null : spirituality!.toJson(),
-    "arts-culture": artsCulture == null ? null : artsCulture!.toJson(),
-  };
+        "small": small,
+        "medium": medium,
+        "large": large,
+      };
 }
 
-class ArtsCulture {
-  late String status;
-
-  ArtsCulture({
-    required this.status,
+class Social {
+  Social({
+    required this.instagramUsername,
+    required this.portfolioUrl,
+    required this.twitterUsername,
   });
 
-  factory ArtsCulture.fromJson(Map<String, dynamic> json) => ArtsCulture(
-    status: json["status"],
-  );
+  String? instagramUsername;
+  String? portfolioUrl;
+  String? twitterUsername;
+
+  factory Social.fromJson(Map<String, dynamic> json) => Social(
+        instagramUsername: json["instagram_username"],
+        portfolioUrl: json["portfolio_url"],
+        twitterUsername: json["twitter_username"],
+      );
 
   Map<String, dynamic> toJson() => {
-    "status": status,
-  };
+        "instagram_username": instagramUsername,
+        "portfolio_url": portfolioUrl,
+        "twitter_username": twitterUsername,
+      };
 }
 
-class Health {
-  late String status;
-  DateTime? approvedOn;
+Pinterest postFromJson(String str) => Pinterest.fromJson(json.decode(str));
 
-  Health({
-    required this.status,
-    this.approvedOn,
-  });
-
-
-  factory Health.fromJson(Map<String, dynamic> json) => Health(
-    status: json["status"],
-    approvedOn: json["approved_on"] == null
-        ? null
-        : DateTime.parse(json["approved_on"]),
-  );
-
-  Map<String, dynamic> toJson() => {
-    "status": status,
-    "approved_on":
-    approvedOn == null ? null : approvedOn!.toIso8601String(),
-  };
-}
-
-class Urls {
-  late String raw;
-  late String full;
-  late String regular;
-  late String small;
-  late String thumb;
-  late String smallS3;
-
-  Urls({
-    required this.raw,
-    required this.full,
-    required this.regular,
-    required this.small,
-    required this.thumb,
-    required this.smallS3,
-  });
-
-  factory Urls.fromJson(Map<String, dynamic> json) => Urls(
-    raw: json["raw"],
-    full: json["full"],
-    regular: json["regular"],
-    small: json["small"],
-    thumb: json["thumb"],
-    smallS3: json["small_s3"],
-  );
-
-  Map<String, dynamic> toJson() => {
-    "raw": raw,
-    "full": full,
-    "regular": regular,
-    "small": small,
-    "thumb": thumb,
-    "small_s3": smallS3,
-  };
-}
+String postToJson(Pinterest data) => json.encode(data.toJson());

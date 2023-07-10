@@ -1,4 +1,8 @@
+//perfil
+import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -9,13 +13,15 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:path/path.dart' as Path;
 import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
+import 'package:flutter/cupertino.dart';
 
+import '../screens/login_screen.dart';
 import '../utils/profile_image_util.dart';
 
 class ImageOverlay extends StatefulWidget {
-  final ImageProvider imageProvider;
+  final String imageUrl;
 
-  ImageOverlay({required this.imageProvider});
+  ImageOverlay({required this.imageUrl});
 
   @override
   _ImageOverlayState createState() => _ImageOverlayState();
@@ -34,7 +40,7 @@ class _ImageOverlayState extends State<ImageOverlay> {
         child: GestureDetector(
           onTap: () {},
           child: Image(
-            image: widget.imageProvider,
+            image: CachedNetworkImageProvider(widget.imageUrl),
           ),
         ),
       ),
@@ -52,6 +58,9 @@ class AccountPage extends StatefulWidget {
 }
 
 class _AccountPageState extends State<AccountPage> {
+  List<int> likes = [];
+  List<int> comments = [];
+  List<String> imageUrls = [];
   final FirebaseAuth _auth = FirebaseAuth.instance;
   bool isImageSelected = false;
   String selectedImageUrl = '';
@@ -61,38 +70,44 @@ class _AccountPageState extends State<AccountPage> {
   String email = "";
   int followers = 2002;
   int followings = 31;
-  var imagePicker;
+  var imagePicker = ImagePicker();
 
-// ...
-
-  Future<String?> uploadImageToFirebase(File file) async {
+  Future<String?> uploadImageToFirebase(Uint8List data) async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-      );
+      String fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+      firebase_storage.Reference firebaseStorageRef = firebase_storage
+          .FirebaseStorage.instance
+          .ref('profile_images/$fileName');
 
-      if (result != null) {
-        PlatformFile file = result.files.first;
+      firebase_storage.UploadTask uploadTask = firebaseStorageRef.putData(data);
 
-        String fileName = file.name!;
-        firebase_storage.Reference firebaseStorageRef = firebase_storage
-            .FirebaseStorage.instance
-            .ref('profile_images/$fileName');
-
-        firebase_storage.UploadTask uploadTask =
-            firebaseStorageRef.putFile(File(file.path!));
-
-        firebase_storage.TaskSnapshot taskSnapshot = await uploadTask;
-        String downloadURL = await taskSnapshot.ref.getDownloadURL();
-        return downloadURL;
-      } else {
-        // El usuario canceló la selección del archivo
-        return null;
-      }
+      firebase_storage.TaskSnapshot taskSnapshot = await uploadTask;
+      String downloadURL = await taskSnapshot.ref.getDownloadURL();
+      return downloadURL;
     } catch (e) {
       print(e.toString());
       return null;
     }
+  }
+
+  Future<List<String>> getFirebaseStorageImageUrls() async {
+    List<String> urls = [];
+
+    try {
+      firebase_storage.ListResult result = await firebase_storage
+          .FirebaseStorage.instance
+          .ref('profile_images')
+          .listAll();
+
+      for (firebase_storage.Reference ref in result.items) {
+        String downloadURL = await ref.getDownloadURL();
+        urls.add(downloadURL);
+      }
+    } catch (e) {
+      print('Error al obtener las URL de las imágenes: $e');
+    }
+
+    return urls;
   }
 
   List<String> defaultImage = [
@@ -100,20 +115,27 @@ class _AccountPageState extends State<AccountPage> {
   ];
 
   Future<void> refresh() async {
+    List<String> urls = await getFirebaseStorageImageUrls();
+
     setState(() {
-      defaultImage = [
-        'https://i2.wp.com/wallpapercave.com/wp/wp2338602.jpg',
-      ];
+      imageUrls = urls; // Corregir esta línea
     });
   }
 
   @override
   void initState() {
     super.initState();
-    imagePicker = ImagePicker();
-
     // Llama a getCurrentUserEmail() cuando la página se inicie
     getCurrentUserEmail();
+    // Carga las imágenes desde Firebase Storage
+    loadFirebaseStorageImages();
+  }
+
+  Future<void> loadFirebaseStorageImages() async {
+    List<String> urls = await getFirebaseStorageImageUrls();
+    setState(() {
+      imageUrls = urls;
+    });
   }
 
   // Método para obtener el correo electrónico del usuario actual
@@ -128,42 +150,43 @@ class _AccountPageState extends State<AccountPage> {
     }
   }
 
-  Future<void> uploadImage() async {
-    var source = await showDialog<ImageSource>(
+  // Método para mostrar la pantalla de comentarios
+  void showCommentsScreen(int imageIndex) {
+    showDialog(
       context: context,
-      builder: (BuildContext context) => AlertDialog(
-        title: const Text('Select Image Source'),
-        actions: <Widget>[
-          TextButton(
-            child: const Text('Camera'),
-            onPressed: () => Navigator.pop(context, ImageSource.camera),
-          ),
-          TextButton(
-            child: const Text('Gallery'),
-            onPressed: () => Navigator.pop(context, ImageSource.gallery),
-          ),
-        ],
+      builder: (_) => AlertDialog(
+        title: Text('Comments'),
+        content: Column(
+          children: [
+            Text('Image Index: $imageIndex'),
+            // Aquí puedes agregar widgets para mostrar y agregar comentarios
+          ],
+        ),
       ),
     );
+  }
 
-    if (source != null) {
-      XFile? image = await imagePicker.pickImage(
-        source: source,
-        imageQuality: 50,
-        preferredCameraDevice: CameraDevice.front,
-      );
+  Future<void> uploadImage() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+    );
 
-      if (image != null) {
-        String? downloadURL = await uploadImageToFirebase(File(image.path));
+    if (result != null) {
+      PlatformFile file = result.files.first;
+
+      Uint8List? bytes = file.bytes;
+      if (bytes != null) {
+        String? downloadURL = await uploadImageToFirebase(bytes);
         if (downloadURL != null) {
           setState(() {
-            // Agrega la URL de descarga a la lista de imágenes
-            defaultImage.add(downloadURL);
+            imageUrls.add(downloadURL);
           });
         } else {
           // La subida de la imagen falló, maneja el error como desees
         }
       }
+    } else {
+      // El usuario canceló la selección del archivo
     }
   }
 
@@ -180,6 +203,36 @@ class _AccountPageState extends State<AccountPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                Padding(
+                  padding: const EdgeInsets.all(10.0),
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const LoginScreen(),
+                        ),
+                      );
+                    },
+                    child: Row(
+                      children: const [
+                        Icon(
+                          Icons.logout,
+                          color: Colors.blue,
+                        ),
+                        SizedBox(width: 5),
+                        Text(
+                          "Login Now",
+                          style: TextStyle(
+                            color: Colors.blue,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
                 AppBar(
                   backgroundColor: Colors.white,
                   elevation: 0,
@@ -204,18 +257,20 @@ class _AccountPageState extends State<AccountPage> {
                 // profile image
                 GestureDetector(
                   onTap: () async {
-                    var source = await showDialog<ImageSource>(
+                    ImageSource? source;
+
+                    var sourceDialog = await showDialog<ImageSource>(
                       context: context,
                       builder: (BuildContext context) => AlertDialog(
-                        title: const Text('Select Image Source'),
+                        title: const Text('Seleccione la fuente de la imagen'),
                         actions: <Widget>[
                           TextButton(
-                            child: const Text('Camera'),
+                            child: const Text('Cámara'),
                             onPressed: () =>
                                 Navigator.pop(context, ImageSource.camera),
                           ),
                           TextButton(
-                            child: const Text('Gallery'),
+                            child: const Text('Galería'),
                             onPressed: () =>
                                 Navigator.pop(context, ImageSource.gallery),
                           ),
@@ -223,22 +278,27 @@ class _AccountPageState extends State<AccountPage> {
                       ),
                     );
 
-                    if (source != null) {
-                      XFile? image = await imagePicker.pickImage(
+                    if (sourceDialog != null) {
+                      source = sourceDialog;
+
+                      final XFile? image = await imagePicker.pickImage(
                         source: source,
                         imageQuality: 50,
                         preferredCameraDevice: CameraDevice.front,
                       );
 
                       if (image != null) {
-                        String? downloadURL =
-                            await uploadImageToFirebase(File(image.path));
-                        if (downloadURL != null) {
-                          setState(() {
-                            UpdateProfileImage.setImage(File(image.path));
-                          });
-                        } else {
-                          // La subida de la imagen falló, maneja el error como desees
+                        Uint8List? bytes = await image.readAsBytes();
+                        if (bytes != null) {
+                          String? downloadURL =
+                              await uploadImageToFirebase(bytes);
+                          if (downloadURL != null) {
+                            setState(() {
+                              imageUrls.add(downloadURL);
+                            });
+                          } else {
+                            // La subida de la imagen falló, maneja el error como desees
+                          }
                         }
                       }
                     }
@@ -248,9 +308,9 @@ class _AccountPageState extends State<AccountPage> {
                     height: 200,
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(100),
-                      child: UpdateProfileImage.getImage() != null
-                          ? Image.file(
-                              UpdateProfileImage.getImage(),
+                      child: imageUrls.isNotEmpty
+                          ? Image.network(
+                              imageUrls.last,
                               fit: BoxFit.cover,
                             )
                           : const Image(
@@ -266,24 +326,28 @@ class _AccountPageState extends State<AccountPage> {
                   height: 12,
                 ),
                 Center(
-                    child: Text(
-                  name,
-                  style: const TextStyle(
+                  child: Text(
+                    name,
+                    style: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 35,
-                      color: Colors.black),
-                )),
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
                 const SizedBox(
                   height: 12,
                 ),
                 Center(
-                    child: Text(
-                  email,
-                  style: const TextStyle(
+                  child: Text(
+                    email,
+                    style: const TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: 15,
-                      color: Colors.black),
-                )),
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
                 const SizedBox(
                   height: 12,
                 ),
@@ -292,49 +356,53 @@ class _AccountPageState extends State<AccountPage> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Center(
-                          child: Text(followers.toString(),
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 15,
-                                  color: Colors.black))),
-                      const SizedBox(
-                        width: 5,
+                        child: Text(
+                          followers.toString(),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 15,
+                            color: Colors.black,
+                          ),
+                        ),
                       ),
+                      const SizedBox(width: 5),
                       const Center(
-                          child: Text("followers",
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 15,
-                                  color: Colors.black))),
-                      const SizedBox(
-                        width: 5,
+                        child: Text(
+                          "followers",
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 15,
+                            color: Colors.black,
+                          ),
+                        ),
                       ),
+                      const SizedBox(width: 5),
                       const CircleAvatar(
                         backgroundColor: Colors.black,
                         radius: 1,
                       ),
-                      const SizedBox(
-                        width: 5,
-                      ),
+                      const SizedBox(width: 5),
                       Center(
-                          child: Text(
-                        followings.toString(),
-                        style: const TextStyle(
+                        child: Text(
+                          followings.toString(),
+                          style: const TextStyle(
                             fontWeight: FontWeight.w500,
                             fontSize: 15,
-                            color: Colors.black),
-                      )),
-                      const SizedBox(
-                        width: 5,
+                            color: Colors.black,
+                          ),
+                        ),
                       ),
+                      const SizedBox(width: 5),
                       const Center(
-                          child: Text(
-                        "followings",
-                        style: TextStyle(
+                        child: Text(
+                          "followings",
+                          style: TextStyle(
                             fontWeight: FontWeight.w500,
                             fontSize: 15,
-                            color: Colors.black),
-                      )),
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -364,25 +432,29 @@ class _AccountPageState extends State<AccountPage> {
                               fillColor: Colors.grey.shade200,
                               hintText: 'Search your Pins',
                               hintStyle: TextStyle(
-                                  color: Colors.grey.shade500,
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 16),
+                                color: Colors.grey.shade500,
+                                fontWeight: FontWeight.w500,
+                                fontSize: 16,
+                              ),
                               contentPadding:
                                   const EdgeInsets.symmetric(horizontal: 20.0),
                               border: const OutlineInputBorder(
                                 borderSide: BorderSide.none,
-                                borderRadius:
-                                    BorderRadius.all(Radius.circular(45.0)),
+                                borderRadius: BorderRadius.all(
+                                  Radius.circular(45.0),
+                                ),
                               ),
                               enabledBorder: const OutlineInputBorder(
                                 borderSide: BorderSide.none,
-                                borderRadius:
-                                    BorderRadius.all(Radius.circular(45.0)),
+                                borderRadius: BorderRadius.all(
+                                  Radius.circular(45.0),
+                                ),
                               ),
                               focusedBorder: const OutlineInputBorder(
                                 borderSide: BorderSide.none,
-                                borderRadius:
-                                    BorderRadius.all(Radius.circular(45.0)),
+                                borderRadius: BorderRadius.all(
+                                  Radius.circular(45.0),
+                                ),
                               ),
                             ),
                           ),
@@ -410,55 +482,105 @@ class _AccountPageState extends State<AccountPage> {
                   child: SizedBox(
                     width: MediaQuery.of(context).size.width,
                     child: MasonryGridView.count(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        padding: const EdgeInsets.all(0),
-                        itemCount: defaultImage.length,
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 10,
-                        crossAxisSpacing: 10,
-                        itemBuilder: (context, index) {
-                          return Column(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(0),
+                      itemCount: imageUrls.length,
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 10,
+                      crossAxisSpacing: 10,
+                      itemBuilder: (context, index) {
+                        final imageUrl = imageUrls[index];
+                        final likeCount =
+                            likes.length > index ? likes[index] : 0;
+                        final commentCount =
+                            comments.length > index ? comments[index] : 0;
+
+                        return GestureDetector(
+                          onTap: () {
+                            showDialog(
+                              context: context,
+                              builder: (_) => Dialog(
+                                child: CachedNetworkImage(
+                                  imageUrl: imageUrl,
+                                  placeholder: (context, url) =>
+                                      const CircularProgressIndicator(),
+                                  errorWidget: (context, url, error) =>
+                                      const Icon(Icons.error),
+                                ),
+                              ),
+                            );
+                          },
+                          child: Column(
                             mainAxisAlignment: MainAxisAlignment.end,
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(15.0),
                                 child: CachedNetworkImage(
-                                  imageUrl: defaultImage[index],
+                                  imageUrl: imageUrl,
                                   placeholder: (context, url) => const Image(
-                                      image: AssetImage('assets/cash/img.png')),
+                                    image: AssetImage('assets/cash/img.png'),
+                                  ),
                                   errorWidget: (context, url, error) =>
                                       const Image(
-                                          image: AssetImage(
-                                              'assets/cash/img_1.png')),
+                                    image: AssetImage('assets/cash/img_1.png'),
+                                  ),
                                   fit: BoxFit.cover,
                                 ),
                               ),
-                              const SizedBox(
-                                height: 5,
-                              ),
+                              const SizedBox(height: 5),
                               SizedBox(
-                                child: Padding(
-                                  padding: const EdgeInsets.only(right: 10),
-                                  child: Align(
-                                    child: GestureDetector(
-                                      onTap: () {},
-                                      child: const Icon(
-                                        FontAwesomeIcons.ellipsisH,
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () {
+                                        setState(() {
+                                          if (likes.contains(index)) {
+                                            likes.remove(index);
+                                          } else {
+                                            likes.add(index);
+                                          }
+                                        });
+                                      },
+                                      child: Icon(
+                                        likes.contains(index)
+                                            ? Icons.favorite
+                                            : Icons.favorite_border,
                                         color: Colors.black,
                                         size: 17,
                                       ),
                                     ),
-                                    alignment: Alignment.centerRight,
-                                  ),
+                                    GestureDetector(
+                                      onTap: () {
+                                        showCommentsScreen(index);
+                                      },
+                                      child: Icon(
+                                        Icons.comment,
+                                        color: Colors.black,
+                                        size: 17,
+                                      ),
+                                    ),
+                                    Text(
+                                      '$likeCount Likes',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                    Text(
+                                      '$commentCount Comments',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                  ],
                                 ),
                                 width: MediaQuery.of(context).size.width / 2,
                                 height: 20,
                               ),
                             ],
-                          );
-                        }),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
                 const SizedBox(
